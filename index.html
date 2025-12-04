@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flip Clock Screensaver</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        /* CSS 變數定義：管理主題顏色 */
+        :root {
+            --bg-color: #000000;
+            --text-color: #e0e0e0;
+            --date-color: #888888;
+            --card-bg: #1a1a1a;
+            --card-bg-bottom: #262626; /* 下半部稍微亮一點增加立體感 */
+            --card-text: #dddddd;
+            --split-line: #000000;
+            --colon-color: #444444;
+            --btn-bg: rgba(255, 255, 255, 0.1);
+            --btn-hover: rgba(255, 255, 255, 0.2);
+            --modal-bg: #1a1a1a;
+            --modal-text: #e0e0e0;
+            --input-bg: #333;
+        }
+
+        /* 淺色模式變數覆寫 */
+        body.light-mode {
+            --bg-color: #e6e6e6;
+            --text-color: #333333;
+            --date-color: #555555;
+            --card-bg: #ffffff;
+            --card-bg-bottom: #f0f0f0;
+            --card-text: #222222;
+            --split-line: #cccccc;
+            --colon-color: #999999;
+            --btn-bg: rgba(0, 0, 0, 0.05);
+            --btn-hover: rgba(0, 0, 0, 0.1);
+            --modal-bg: #ffffff;
+            --modal-text: #333333;
+            --input-bg: #eee;
+        }
+
+        /* 基礎設定 */
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden;
+            user-select: none;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* 隱藏游標 */
+        body.hide-cursor {
+            cursor: none;
+        }
+
+        /* 翻頁卡片容器 */
+        .flip-clock {
+            perspective: 1000px;
+        }
+
+        /* 單個數字卡片群組 */
+        .flip-unit {
+            position: relative;
+            width: 12vw;
+            height: 16vw;
+            max-width: 160px;
+            max-height: 220px;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            font-size: 10vw;
+            line-height: 16vw;
+            text-align: center;
+            color: var(--card-text);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: background-color 0.3s, color 0.3s;
+            
+            @media (min-width: 1400px) {
+                font-size: 140px;
+                line-height: 220px;
+            }
+        }
+
+        /* 上下半部的基礎樣式 */
+        .top, .bottom, .top-flip, .bottom-flip {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 50%;
+            overflow: hidden;
+            background-color: var(--card-bg);
+            backface-visibility: hidden;
+            border-radius: 8px 8px 0 0;
+            transition: background-color 0.3s;
+        }
+
+        .bottom, .bottom-flip {
+            top: 50%;
+            border-radius: 0 0 8px 8px;
+            line-height: 0;
+            background-color: var(--card-bg-bottom);
+        }
+
+        /* 內容對齊 */
+        .bottom-flip span, .bottom span {
+            display: block;
+            transform: translateY(-50%);
+        }
+
+        /* 動畫層初始狀態 */
+        .top-flip {
+            transform-origin: bottom;
+            z-index: 2;
+        }
+        .bottom-flip {
+            transform-origin: top;
+            transform: rotateX(90deg);
+            z-index: 1;
+        }
+
+        /* 中間分割線 */
+        .flip-unit::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: var(--split-line);
+            z-index: 5;
+            transform: translateY(-50%);
+            transition: background-color 0.3s;
+        }
+
+        /* 翻頁動畫 (優化版) */
+        .flipping .top-flip {
+            animation: flip-top 0.3s ease-in forwards;
+        }
+        .flipping .bottom-flip {
+            animation: flip-bottom 0.3s ease-out 0.3s forwards;
+        }
+
+        @keyframes flip-top {
+            0% { transform: rotateX(0deg); }
+            100% { transform: rotateX(-90deg); }
+        }
+
+        @keyframes flip-bottom {
+            0% { transform: rotateX(90deg); }
+            100% { transform: rotateX(0deg); }
+        }
+
+        /* 日期樣式 */
+        .date-display {
+            font-size: 2vw;
+            color: var(--date-color);
+            letter-spacing: 2px;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            transition: color 0.3s;
+        }
+
+        /* AM/PM 顯示 (僅在12小時制顯示) */
+        .ampm-display {
+            font-size: 1.5vw;
+            color: var(--date-color);
+            margin-left: 1rem;
+            align-self: flex-end;
+            margin-bottom: 2vw;
+            font-weight: bold;
+            display: none; /* 預設隱藏，JS控制顯示 */
+            width: 3vw; /* 佔位防止跳動 */
+        }
+        .show-ampm {
+            display: block;
+        }
+
+        /* 分隔冒號 */
+        .colon {
+            font-size: 8vw;
+            color: var(--colon-color);
+            padding: 0 1vw;
+            margin-top: -2vw;
+            transition: color 0.3s;
+        }
+
+        /* 設定按鈕 */
+        #settings-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: var(--btn-bg);
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 50;
+            transition: background-color 0.3s;
+        }
+        #settings-btn:hover {
+            background-color: var(--btn-hover);
+        }
+        #settings-btn svg {
+            fill: var(--text-color);
+            width: 24px;
+            height: 24px;
+        }
+
+        /* 設定選單 Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-content {
+            background-color: var(--modal-bg);
+            color: var(--modal-text);
+            padding: 2rem;
+            border-radius: 12px;
+            width: 300px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            transform: translateY(20px);
+            transition: transform 0.3s, background-color 0.3s;
+        }
+        .modal-overlay.open .modal-content {
+            transform: translateY(0);
+        }
+        
+        /* Toggle Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .switch input { 
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--input-bg);
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-center items-center">
+
+    <!-- 設定按鈕 -->
+    <div id="settings-btn" title="設定">
+        <svg viewBox="0 0 24 24">
+            <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+        </svg>
+    </div>
+
+    <!-- 設定選單 -->
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold">設定</h2>
+                <button id="close-modal" class="text-2xl hover:text-gray-400">&times;</button>
+            </div>
+            
+            <div class="flex justify-between items-center mb-4">
+                <span>深色模式 (Dark Mode)</span>
+                <label class="switch">
+                    <input type="checkbox" id="theme-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="flex justify-between items-center mb-4">
+                <span>24小時制</span>
+                <label class="switch">
+                    <input type="checkbox" id="format-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="mt-8 text-sm opacity-50 text-center">
+                設定會自動儲存
+            </div>
+        </div>
+    </div>
+
+    <!-- 日期顯示 -->
+    <div id="date-container" class="date-display font-bold">
+        Loading...
+    </div>
+
+    <!-- 時鐘主體容器 -->
+    <div class="flex items-end">
+        
+        <div class="flip-clock flex items-center justify-center gap-2 sm:gap-4">
+            
+            <!-- 小時 -->
+            <div class="flip-unit" id="hour-tens">
+                <div class="top">0</div>
+                <div class="bottom"><span>0</span></div>
+                <div class="top-flip">0</div>
+                <div class="bottom-flip"><span>0</span></div>
+            </div>
+            <div class="flip-unit" id="hour-ones">
+                <div class="top">0</div>
+                <div class="bottom"><span>0</span></div>
+                <div class="top-flip">0</div>
+                <div class="bottom-flip"><span>0</span></div>
+            </div>
+
+            <!-- 冒號 -->
+            <div class="colon">:</div>
+
+            <!-- 分鐘 -->
+            <div class="flip-unit" id="min-tens">
+                <div class="top">0</div>
+                <div class="bottom"><span>0</span></div>
+                <div class="top-flip">0</div>
+                <div class="bottom-flip"><span>0</span></div>
+            </div>
+            <div class="flip-unit" id="min-ones">
+                <div class="top">0</div>
+                <div class="bottom"><span>0</span></div>
+                <div class="top-flip">0</div>
+                <div class="bottom-flip"><span>0</span></div>
+            </div>
+
+            <!-- 冒號 -->
+            <div class="colon">:</div>
+
+            <!-- 秒數 -->
+            <div class="flip-unit" id="sec-tens">
+                <div class="top">0</div>
+                <div class="bottom"><span>0</span></div>
+                <div class="top-flip">0</div>
+                <div class="bottom-flip"><span>0</span></div>
+            </div>
+            <div class="flip-unit" id="sec-ones">
+                <div class="top">0</div>
+                <div class="bottom"><span>0</span></div>
+                <div class="top-flip">0</div>
+                <div class="bottom-flip"><span>0</span></div>
+            </div>
+        </div>
+
+        <!-- AM/PM 顯示 -->
+        <div id="ampm-display" class="ampm-display">AM</div>
+    </div>
+
+    <div class="fixed bottom-4 text-gray-500 text-xs opacity-50">
+        點擊畫面切換全螢幕
+    </div>
+
+    <script>
+        // 設定預設值
+        const defaultConfig = {
+            darkMode: true,
+            is24Hour: true
+        };
+
+        // 讀取設定或使用預設
+        let config = JSON.parse(localStorage.getItem('flipClockConfig')) || defaultConfig;
+
+        // DOM 元素
+        const els = {
+            h1: document.getElementById('hour-tens'),
+            h2: document.getElementById('hour-ones'),
+            m1: document.getElementById('min-tens'),
+            m2: document.getElementById('min-ones'),
+            s1: document.getElementById('sec-tens'),
+            s2: document.getElementById('sec-ones'),
+            date: document.getElementById('date-container'),
+            ampm: document.getElementById('ampm-display'),
+            settingsBtn: document.getElementById('settings-btn'),
+            modal: document.getElementById('settings-modal'),
+            closeModal: document.getElementById('close-modal'),
+            themeToggle: document.getElementById('theme-toggle'),
+            formatToggle: document.getElementById('format-toggle')
+        };
+
+        // 初始化設定 UI
+        function initSettings() {
+            els.themeToggle.checked = config.darkMode;
+            els.formatToggle.checked = config.is24Hour;
+            applyTheme();
+        }
+
+        // 應用主題顏色
+        function applyTheme() {
+            if (config.darkMode) {
+                document.body.classList.remove('light-mode');
+            } else {
+                document.body.classList.add('light-mode');
+            }
+        }
+
+        // 儲存設定
+        function saveConfig() {
+            localStorage.setItem('flipClockConfig', JSON.stringify(config));
+            // 立即強制刷新時鐘顯示以免格式切換有延遲
+            updateClock(true); 
+        }
+
+        // 監聽器
+        els.settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // 防止觸發全螢幕
+            els.modal.classList.add('open');
+        });
+
+        els.closeModal.addEventListener('click', (e) => {
+            e.stopPropagation();
+            els.modal.classList.remove('open');
+        });
+
+        els.modal.addEventListener('click', (e) => {
+            if (e.target === els.modal) {
+                els.modal.classList.remove('open');
+            }
+        });
+
+        els.themeToggle.addEventListener('change', (e) => {
+            config.darkMode = e.target.checked;
+            applyTheme();
+            saveConfig();
+        });
+
+        els.formatToggle.addEventListener('change', (e) => {
+            config.is24Hour = e.target.checked;
+            saveConfig();
+        });
+
+        // 翻頁邏輯
+        function flip(element, newValue) {
+            const top = element.querySelector('.top');
+            const bottom = element.querySelector('.bottom span');
+            const topFlip = element.querySelector('.top-flip');
+            const bottomFlip = element.querySelector('.bottom-flip span');
+
+            const currentValue = top.innerText;
+            if (currentValue === newValue) return;
+
+            topFlip.innerText = currentValue;
+            bottomFlip.innerText = newValue;
+            top.innerText = newValue;
+            bottom.innerText = currentValue;
+
+            element.classList.remove('flipping');
+            void element.offsetWidth; 
+            element.classList.add('flipping');
+
+            setTimeout(() => {
+                element.classList.remove('flipping');
+                bottom.innerText = newValue;
+                topFlip.innerText = newValue;
+                bottomFlip.innerText = newValue;
+            }, 600);
+        }
+
+        function updateClock(forceUpdate = false) {
+            const now = new Date();
+
+            // 日期
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const date = now.getDate();
+            const dayNames = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
+            const day = dayNames[now.getDay()];
+            
+            const dateString = `${year}年 ${month}月 ${date}日 ${day}`;
+            if (els.date.innerText !== dateString) {
+                els.date.innerText = dateString;
+            }
+
+            // 時間處理
+            let h = now.getHours();
+            const m = now.getMinutes().toString().padStart(2, '0');
+            const s = now.getSeconds().toString().padStart(2, '0');
+
+            // 處理 12/24 小時制
+            if (!config.is24Hour) {
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                h = h % 12;
+                h = h ? h : 12; // 0 點變 12 點
+                
+                // 更新 AM/PM 顯示
+                els.ampm.innerText = ampm;
+                els.ampm.classList.add('show-ampm');
+            } else {
+                els.ampm.classList.remove('show-ampm');
+            }
+
+            const hStr = h.toString().padStart(2, '0');
+
+            // 如果是強制更新 (例如切換格式時)，直接改文字不翻頁(避免動畫錯亂)，或者也可以讓它翻頁
+            // 這裡我們簡單點，直接用 flip，如果數字沒變 flip 會自動忽略
+            flip(els.h1, hStr[0]);
+            flip(els.h2, hStr[1]);
+            flip(els.m1, m[0]);
+            flip(els.m2, m[1]);
+            flip(els.s1, s[0]);
+            flip(els.s2, s[1]);
+        }
+
+        // 初始化
+        initSettings();
+        setInterval(() => updateClock(), 1000);
+        updateClock();
+
+        // 全螢幕 (排除 Modal 和 按鈕)
+        document.body.addEventListener('click', (e) => {
+            // 如果點擊的是 modal 內部或按鈕，不觸發全螢幕
+            if (els.modal.contains(e.target) || els.settingsBtn.contains(e.target)) {
+                return;
+            }
+
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(e => console.log(e));
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        });
+
+        // 隱藏滑鼠
+        let timeout;
+        document.onmousemove = function(){
+            document.body.classList.remove('hide-cursor');
+            clearTimeout(timeout);
+            
+            // 如果 modal 開著，不隱藏滑鼠
+            if(els.modal.classList.contains('open')) return;
+
+            timeout = setTimeout(function(){
+                document.body.classList.add('hide-cursor');
+            }, 3000);
+        };
+    </script>
+</body>
+</html>
